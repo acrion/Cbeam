@@ -1,0 +1,1 @@
+# define CBEAM_VERSION "@PROJECT_VERSION@"
