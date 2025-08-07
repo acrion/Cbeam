@@ -36,13 +36,13 @@ namespace cbeam::error
      * @class runtime_error
      * @brief A Cbeam-specific runtime error that also acts like std::runtime_error.
      *
-     * This class inherits from cbeam::error::base_error and std::runtime_error via
-     * virtual inheritance. Catching cbeam::error::base_error will also catch this type,
+     * This class inherits from cbeam::error::base_error and std::runtime_error.
+     * Catching cbeam::error::base_error will also catch this type,
      * and catching std::runtime_error will catch it as well.
      */
     class runtime_error
-        : public virtual base_error
-        , public virtual std::runtime_error
+        : public base_error
+        , public std::runtime_error
     {
     public:
         /**

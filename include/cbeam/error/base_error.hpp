@@ -25,19 +25,13 @@ along with Cbeam. If not, see <https://www.gnu.org/licenses/>.
 
 #pragma once
 
-#include <exception>
-
 namespace cbeam::error
 {
     /**
      * @class base_error
-     * @brief The root class for all Cbeam-specific exceptions, akin to std::exception.
-     *
-     * This class inherits virtually from std::exception to allow multiple inheritance
-     * with standard library exceptions (e.g., std::runtime_error or std::system_error),
-     * without generating multiple subobjects of std::exception.
+     * @brief The root class for all Cbeam-specific exceptions. Not meant to be directly thrown. Catching it will catch only Cbeam-specific exceptions.
      */
-    class base_error : public virtual std::exception
+    class base_error
     {
     public:
         /**
@@ -48,14 +42,14 @@ namespace cbeam::error
         /**
          * @brief Virtual destructor.
          */
-        ~base_error() override = default;
+        virtual ~base_error() = default;
 
         /**
          * @brief Returns a generic explanatory string for all Cbeam base errors.
          *
          * @return A pointer to a null-terminated string with an error message.
          */
-        const char* what() const noexcept override
+        const char* what() const noexcept
         {
             return "cbeam::error::base_error";
         }

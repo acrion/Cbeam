@@ -36,13 +36,13 @@ namespace cbeam::error
      * @class logic_error
      * @brief A Cbeam-specific logic error that also behaves like std::logic_error.
      *
-     * This class inherits from cbeam::error::base_error and std::logic_error via
-     * virtual inheritance. Catching cbeam::error::base_error will also catch this type,
+     * This class inherits from cbeam::error::base_error and std::logic_error.
+     * Catching cbeam::error::base_error will also catch this type,
      * and catching std::logic_error will catch it as well.
      */
     class logic_error
-        : public virtual base_error
-        , public virtual std::logic_error
+        : public base_error
+        , public std::logic_error
     {
     public:
         /**

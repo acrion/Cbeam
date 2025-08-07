@@ -36,13 +36,13 @@ namespace cbeam::error
      * @class overflow_error
      * @brief A Cbeam-specific logic error that also behaves like std::overflow_error.
      *
-     * This class inherits from cbeam::error::base_error and std::overflow_error via
-     * virtual inheritance. Catching cbeam::error::base_error will also catch this type,
+     * This class inherits from cbeam::error::base_error and std::overflow_error.
+     * Catching cbeam::error::base_error will also catch this type,
      * and catching std::overflow_error will catch it as well.
      */
     class overflow_error
-        : public virtual base_error
-        , public virtual std::overflow_error
+        : public base_error
+        , public std::overflow_error
     {
     public:
         /**

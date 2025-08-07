@@ -36,8 +36,8 @@ namespace cbeam::error
      * @class out_of_range
      * @brief A Cbeam-specific out_of_range error that also behaves like std::out_of_range.
      *
-     * This class inherits from cbeam::error::base_error and std::out_of_range via
-     * virtual inheritance. As a result, throwing this exception can be caught by:
+     * This class inherits from cbeam::error::base_error and std::out_of_range.
+     * As a result, throwing this exception can be caught by:
      * - catch(const cbeam::error::base_error&)
      * - catch(const cbeam::error::out_of_range&)
      * - catch(const std::out_of_range&)
@@ -45,8 +45,8 @@ namespace cbeam::error
      * - catch(const std::exception&)
      */
     class out_of_range
-        : public virtual cbeam::error::base_error
-        , public virtual std::out_of_range
+        : public cbeam::error::base_error
+        , public std::out_of_range
     {
     public:
         /**

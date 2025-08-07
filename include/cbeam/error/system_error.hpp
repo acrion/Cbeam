@@ -47,10 +47,6 @@ namespace cbeam::error
      * This class simplifies the creation of system errors with custom messages while ensuring that the
      * error codes and categories are consistent with the underlying operating system's conventions.
      *
-     * Inherits from cbeam::error::base_error and std::system_error via
-     * virtual inheritance. This ensures a single std::exception subobject
-     * when combined with other cbeam::error classes.
-     *
      * Usage:
      * This class can be used to throw exceptions with detailed error messages, especially in scenarios
      * where system calls fail. It automatically uses the correct error code and category without requiring
@@ -78,8 +74,8 @@ namespace cbeam::error
      * is used on Unix-based systems for its broader applicability across various types of errors indicated by `errno`.
      */
     class system_error
-        : public virtual base_error
-        , public virtual std::system_error
+        : public base_error
+        , public std::system_error
     {
     public:
 #ifdef _WIN32

@@ -38,6 +38,8 @@ unsuccessfulbuild
 **/Release*
 **/Debug*
 **/packages/*
+/.idea
+/build
 build-*
 testbuild*
 src/build/*
