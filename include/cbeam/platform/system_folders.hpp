@@ -30,7 +30,7 @@ along with Cbeam. If not, see <https://www.gnu.org/licenses/>.
 #ifdef _WIN32
     #include "windows_config.hpp"
     #include <Knownfolders.h>
-    #include <shlobj_core.h>
+    #include <shlobj.h>
     #pragma comment(lib, "comsuppw.lib")
     #pragma comment(lib, "kernel32.lib")
 #else

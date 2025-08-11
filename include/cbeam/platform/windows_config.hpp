@@ -113,32 +113,5 @@ namespace cbeam::platform
 
         return message;
     }
-
-    inline std::string get_last_windows_error_message()
-    {
-        DWORD error_code = GetLastError(); // we do not check if error_code == 0, because according to documentation "some functions set the last-error code to 0 on success and others do not" https://learn.microsoft.com/en-us/windows/win32/api/errhandlingapi/nf-errhandlingapi-getlasterror
-
-        LPSTR  message_buffer = nullptr;
-        size_t size           = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                                     NULL,
-                                     error_code,
-                                     MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-                                     (LPSTR)&message_buffer,
-                                     0,
-                                     NULL);
-
-        if (size > 0)
-        {
-            std::string message(message_buffer, size);
-            LocalFree(message_buffer);
-            return message;
-        }
-        else
-        {
-            // This compiles to the documentation of `FormatMessageA`: "To get extended error information, call GetLastError".
-            // https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-formatmessagea
-            return get_last_windows_error_message();
-        }
-    }
 }
 #endif

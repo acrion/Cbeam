@@ -70,41 +70,29 @@ namespace cbeam::concurrency
     }
 
 #ifdef _WIN32
-    #pragma pack(push, 8)
-    typedef struct tagTHREADNAME_INFO
-    {
-        DWORD  dwType;     // Must be 0x1000.
-        LPCSTR szName;     // Pointer to name (in user addr space).
-        DWORD  dwThreadID; // Thread ID (-1=caller thread).
-        DWORD  dwFlags;    // Reserved for future use, must be zero.
-    } THREADNAME_INFO;
-    #pragma pack(pop)
-
     /**
-     * @brief Sets the name for a thread with a specified Thread ID.
+     * @brief Sets the name for a thread using its native handle.
      *
-     * This Windows-specific function uses a debugger exception mechanism
-     * to associate a name with a thread in debugging tools like Visual Studio.
+     * This Windows-specific function uses the modern SetThreadDescription API,
+     * which works for both MSVC and MinGW compilers.
      *
-     * @param dwThreadID The numeric thread ID.
+     * @param thread_handle The native HANDLE of the thread.
      * @param thread_name The name to set for the thread.
      */
-    inline void set_thread_name(uint32_t dwThreadID, const char* thread_name)
+    inline void set_thread_name_by_handle(HANDLE thread_handle, const char* thread_name)
     {
-        const DWORD     MS_VC_EXCEPTION = 0x406D1388;
-        THREADNAME_INFO info;
-        info.dwType     = 0x1000;
-        info.szName     = thread_name;
-        info.dwThreadID = dwThreadID;
-        info.dwFlags    = 0;
+        // Convert char* to wchar_t* for the Windows API
+        const int size = MultiByteToWideChar(CP_UTF8, 0, thread_name, -1, nullptr, 0);
+        if (size == 0) {
+            return;
+        }
+        std::wstring wide_name(size, 0);
+        if (MultiByteToWideChar(CP_UTF8, 0, thread_name, -1, &wide_name[0], size) == 0) {
+            return;
+        }
 
-        __try
-        {
-            RaiseException(MS_VC_EXCEPTION, 0, sizeof(info) / sizeof(ULONG_PTR), (ULONG_PTR*)&info);
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
-        }
+        // Set the thread name using the modern API
+        ::SetThreadDescription(thread_handle, wide_name.c_str());
     }
 
     /**
@@ -114,7 +102,7 @@ namespace cbeam::concurrency
      */
     inline void set_thread_name(const char* thread_name)
     {
-        set_thread_name(GetCurrentThreadId(), thread_name);
+        set_thread_name_by_handle(GetCurrentThread(), thread_name);
     }
 
     /**
@@ -125,8 +113,7 @@ namespace cbeam::concurrency
      */
     inline void set_thread_name(std::thread& thread, const char* thread_name)
     {
-        DWORD thread_id = ::GetThreadId(static_cast<HANDLE>(thread.native_handle()));
-        set_thread_name(thread_id, thread_name);
+        set_thread_name_by_handle(reinterpret_cast<HANDLE>(thread.native_handle()), thread_name);
     }
 #elif defined(__APPLE__)
     /**

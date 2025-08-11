@@ -27,6 +27,7 @@ along with Cbeam. If not, see <https://www.gnu.org/licenses/>.
 
 #ifdef _WIN32
     #include <cbeam/logging/log_manager.hpp>
+    #include <cbeam/error/runtime_error.hpp>
 
     #include <roapi.h>
     #pragma comment(lib, "runtimeobject.lib")
