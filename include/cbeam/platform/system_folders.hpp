@@ -26,6 +26,7 @@ along with Cbeam. If not, see <https://www.gnu.org/licenses/>.
 #pragma once
 
 #include <cbeam/error/runtime_error.hpp> // for cbeam::error:runtime_error
+#include <vector>
 
 #ifdef _WIN32
     #include "windows_config.hpp"
@@ -35,6 +36,11 @@ along with Cbeam. If not, see <https://www.gnu.org/licenses/>.
     #pragma comment(lib, "kernel32.lib")
 #else
     #include <cbeam/config.hpp>
+    #include <limits.h> // for PATH_MAX
+    #include <stdlib.h> // for realpath
+    #if defined(__APPLE__)
+        #include <mach-o/dyld.h> // for _NSGetExecutablePath
+    #endif
 
     #if HAVE_PWD_H
         #include <pwd.h> // for getpwuid, passwd
@@ -189,5 +195,117 @@ namespace cbeam::filesystem
         }
 
         return cache_dir;
+    }
+
+    /**
+     * @brief Retrieves the path to the binary that contains the current code.
+     *
+     * Pragmatic, cross-platform implementation:
+     *  - Windows: uses GetModuleHandleExW (by address) + GetModuleFileNameW, falling back to the EXE.
+     *  - Linux:   resolves "/proc/self/exe".
+     *  - macOS:   uses _NSGetExecutablePath and canonicalises with realpath.
+     *
+     * @param include_filename If true (default), returns the full path including the filename.
+     *                         If false, returns the directory containing the binary.
+     * @return A std::filesystem::path pointing to the current binary (or its directory).
+     * @throws cbeam::error::runtime_error on failure or if the resulting path does not exist.
+     */
+    inline std::filesystem::path get_current_binary_path(bool include_filename = true)
+    {
+        static std::filesystem::path cached_full_path;
+        static std::mutex            mtx;
+        std::lock_guard<std::mutex>  lock(mtx);
+
+        if (cached_full_path.empty())
+        {
+#ifdef _WIN32
+            // Try to get the module that contains this function (works for both EXE and DLL).
+            HMODULE mod = nullptr;
+            if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                    reinterpret_cast<LPCWSTR>(&get_current_binary_path),
+                                    &mod))
+            {
+                // Pragmatic fallback: use the main EXE.
+                mod = nullptr;
+            }
+
+            std::vector<wchar_t> buffer(1024);
+            for (;;)
+            {
+                DWORD len = GetModuleFileNameW(mod, buffer.data(), static_cast<DWORD>(buffer.size()));
+                if (len == 0)
+                {
+                    throw cbeam::error::runtime_error(
+                        std::string("Failed to determine path to current binary: ")
+                        + cbeam::platform::get_last_windows_error_message());
+                }
+                // If the buffer was too small, the result may be truncated; grow and retry.
+                if (len < buffer.size() - 1)
+                {
+                    cached_full_path = std::filesystem::path(buffer.data(), buffer.data() + len);
+                    break;
+                }
+                buffer.resize(buffer.size() * 2);
+            }
+
+#elif defined(__linux__)
+            // Read the /proc/self/exe symlink.
+            std::vector<char> buffer(1024);
+            for (;;)
+            {
+                ssize_t len = ::readlink("/proc/self/exe", buffer.data(), buffer.size() - 1);
+                if (len < 0)
+                {
+                    throw cbeam::error::runtime_error("Failed to determine path to current binary via /proc/self/exe");
+                }
+                if (static_cast<size_t>(len) >= buffer.size() - 1)
+                {
+                    buffer.resize(buffer.size() * 2);
+                    continue;
+                }
+                buffer[len] = '\0';
+                cached_full_path = std::filesystem::path(buffer.data());
+                break;
+            }
+
+#elif defined(__APPLE__)
+            // First call to get required buffer size.
+            uint32_t size = 0;
+            if (_NSGetExecutablePath(nullptr, &size) != -1)
+            {
+                // According to Apple docs, this should return -1 and set 'size'.
+                throw cbeam::error::runtime_error("Failed to determine required buffer size for _NSGetExecutablePath");
+            }
+
+            std::vector<char> buffer(size);
+            if (_NSGetExecutablePath(buffer.data(), &size) != 0)
+            {
+                throw cbeam::error::runtime_error("Failed to determine path to current binary via _NSGetExecutablePath");
+            }
+
+            // Canonicalise to resolve symlinks if possible.
+            char resolved[PATH_MAX];
+            if (::realpath(buffer.data(), resolved) != nullptr)
+            {
+                cached_full_path = std::filesystem::path(resolved);
+            }
+            else
+            {
+                // Fallback to the non-canonicalised path.
+                cached_full_path = std::filesystem::path(buffer.data());
+            }
+#else
+    #error Unknown platform
+#endif
+        }
+
+        const auto result = include_filename ? cached_full_path : cached_full_path.parent_path();
+
+        if (!std::filesystem::exists(result))
+        {
+            throw cbeam::error::runtime_error("Path '" + result.string() + "' is expected to exist on this system.");
+        }
+
+        return result;
     }
 }
