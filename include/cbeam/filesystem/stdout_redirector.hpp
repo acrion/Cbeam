@@ -1,3 +1,4 @@
+
 /*
 Copyright (c) 2025 acrion innovations GmbH
 Authors: Stefan Zipproth, s.zipproth@acrion.ch
@@ -37,7 +38,6 @@ along with Cbeam. If not, see <https://www.gnu.org/licenses/>.
 
 #ifdef _WIN32
     #include <cbeam/platform/windows_config.hpp>
-    #include <io.h>
 #endif
 
 namespace cbeam::filesystem
@@ -75,41 +75,17 @@ namespace cbeam::filesystem
                 fflush(stdout);
                 bool done = false;
 #ifdef _WIN32
-                HANDLE hStdout = GetStdHandle(STD_OUTPUT_HANDLE);
-                if (hStdout != INVALID_HANDLE_VALUE)
-                {
-                    int fdStdout = _open_osfhandle((intptr_t)hStdout, _O_TEXT);
-                    if (fdStdout != -1)
-                    {
-                        FILE* fpStdout = _fdopen(fdStdout, "w");
-                        if (fpStdout)
-                        {
-                            *stdout = *fpStdout;
-                            std::setvbuf(stdout, NULL, _IONBF, 0);
-                        }
-                        else
-                        {
-                            CBEAM_LOG("cbeam::filesystem::stdout_redirector: Could not set stdout to default (failed to reopen stdout as FILE*)");
-                        }
-                    }
-                    else
-                    {
-                        CBEAM_LOG("cbeam::filesystem::stdout_redirector: Could not set stdout to default (failed to open osfhandle as file descriptor)");
-                    }
-                }
-                else
-                {
-                    CBEAM_LOG("cbeam::filesystem::stdout_redirector: Could not set stdout to default (invalid standard output handle)");
-                }
+                // "CONOUT$" is the special device name for the console on Windows, analogous to "/dev/tty" on Linux.
+                done = freopen("CONOUT$", "w", stdout) != nullptr;
 #else
                 done = freopen("/dev/tty", "w", stdout) != nullptr;
-
+#endif
                 if (!done)
                 {
                     CBEAM_LOG("cbeam::filesystem::stdout_redirector: Could not set stdout to default");
                 }
-#endif
-                if (done && redirected_stdout != stdout)
+
+                if (redirected_stdout != stdout) // This check prevents closing stdout if it wasn't successfully redirected back.
                 {
                     assert(fclose(redirected_stdout) == 0);
                 }
