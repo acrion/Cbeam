@@ -49,22 +49,16 @@ namespace cbeam::container
     template <typename Key, typename Value, typename... VariantTypes>
     bool key_exists(const std::map<std::variant<VariantTypes...>, Value>& t, const Key& key)
     {
-        for (const auto& pair : t)
-        {
-            bool exists = std::visit([&key](auto&& lhs) -> bool
-                                     {
-                                         if constexpr (std::is_same_v<decltype(lhs), Key>)
-                                         {
-                                             return lhs == key;
-                                         }
-                                         return false; },
-                                     pair.first);
-            if (exists)
-            {
-                return true;
-            }
-        }
-        return false;
+        using K = std::decay_t<Key>;
+        static_assert((std::is_same_v<K, std::decay_t<VariantTypes>> || ...),
+                      "Key must be one of the variant alternatives");
+
+        const std::variant<VariantTypes...> probe(std::in_place_type<K>, key);
+#if __cplusplus >= 202002L
+        return t.contains(probe);
+#else
+        return t.find(probe) != t.end();
+#endif
     }
 
     /**
