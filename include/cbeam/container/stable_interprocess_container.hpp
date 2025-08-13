@@ -31,8 +31,8 @@ along with Cbeam. If not, see <https://www.gnu.org/licenses/>.
 #include <cbeam/memory/interprocess_shared_memory.hpp> // for cbeam::memory::interprocess_shared_memory
 #include <cbeam/serialization/traits.hpp>              // for cbeam::serialization::traits, cbeam::serialization::serialized_object
 
-#include <cstring>   // for memcpy, size_t, std::memcpy, std::size_t
-#include <string>    // for std::allocator, std::operator+, std::string_literals::operator""s, std::char_traits, std::to_string, std::string, std::string_literals
+#include <cstring> // for memcpy, size_t, std::memcpy, std::size_t
+#include <string>  // for std::allocator, std::operator+, std::string_literals::operator""s, std::char_traits, std::to_string, std::string, std::string_literals
 
 namespace cbeam::container
 {
@@ -216,7 +216,7 @@ namespace cbeam::container
             if (buffer.size() > capacity())
             {
                 std::string errorMessage = "cbeam::stable_interprocess_container::serialize: size of serialized container ("s + std::to_string(buffer.size())
-                                         + " bytes) exceeds shared memory size ("s + std::to_string(capacity()) + " bytes)."s;
+                                         + " bytes) exceeds shared memory size ("s + std::to_string(capacity()) + " bytes). Set environment variable CBEAM_SRB_MAP_BYTES to configure a higher value."s;
                 CBEAM_LOG(errorMessage);
                 throw cbeam::error::runtime_error(errorMessage);
             }

@@ -47,7 +47,7 @@ namespace cbeam::serialization
      * @return container::stable_reference_buffer The serialized data.
      */
     template <typename T>
-    static inline container::stable_reference_buffer serialize(const T& instance) noexcept
+    static inline container::stable_reference_buffer serialize(const T& instance)
     {
         using namespace std::string_literals;
         container::stable_reference_buffer byte_stream;
@@ -59,10 +59,12 @@ namespace cbeam::serialization
         catch (const std::exception& ex)
         {
             CBEAM_LOG("cbeam::serialization: Exception while serializing: "s + ex.what());
+            throw;
         }
         catch (...)
         {
             CBEAM_LOG("cbeam::serialization: Unknown exception while serializing"s);
+            throw;
         }
 
         return byte_stream;

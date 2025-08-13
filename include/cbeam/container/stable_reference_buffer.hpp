@@ -29,6 +29,7 @@ along with Cbeam. If not, see <https://www.gnu.org/licenses/>.
 #include <cbeam/container/buffer.hpp>                  // for cbeam::container::buffer
 #include <cbeam/container/stable_interprocess_map.hpp> // for cbeam::container::stable_interprocess_map
 #include <cbeam/convert/string.hpp>                    // for cbeam::convert::to_string
+#include <cbeam/error/bad_alloc.hpp>                   // for cbeam::error::bad_alloc
 #include <cbeam/error/logic_error.hpp>                 // for cbeam::error::logic_error
 #include <cbeam/error/runtime_error.hpp>               // for cbeam::error::runtime_error
 #include <cbeam/lifecycle/singleton.hpp>               // for cbeam::lifecycle::singleton
@@ -40,9 +41,9 @@ along with Cbeam. If not, see <https://www.gnu.org/licenses/>.
 #include <cstddef> // for size_t, std::size_t
 #include <cstdint> // for uint8_t
 
-#include <memory>    // for std::shared_ptr, std::__shared_ptr_access, std::allocator
-#include <set>       // for std::operator!=, std::set
-#include <string>    // for std::operator+, std::to_string, std::char_traits, std::basic_string, std::string
+#include <memory> // for std::shared_ptr, std::__shared_ptr_access, std::allocator
+#include <set>    // for std::operator!=, std::set
+#include <string> // for std::operator+, std::to_string, std::char_traits, std::basic_string, std::string
 
 namespace cbeam::container
 {
@@ -81,54 +82,79 @@ namespace cbeam::container
         class delay_deallocation
         {
         public:
-            /// \brief Begin a scope that prevents deallocation of memory created within it.
             delay_deallocation()
+                : _use_count{get_use_count()}
+                , _initial_on_entry{get_initial_use_count()} // remember entry state
             {
                 auto lock = _use_count->get_lock_guard();
-                _use_count->foreach ([this](auto it)
-                                     { _old_entries.insert(it.first); return true; });
-                _use_count->insert(nullptr, get_initial_use_count() + 1);
-                // CBEAM_LOG_DEBUG("Incrementing initial useCount to " + std::to_string(get_initial_use_count()) + " to delay deallocation of memory created in this scope");
+                _use_count->foreach ([this](auto kv)
+                                     {
+            _old_entries.insert(kv.first);
+            return true; });
+                // increase initial use count for allocations created in this scope
+                _use_count->insert(nullptr, _initial_on_entry + 1);
             }
 
-            /// \brief Exit the protected scope, potentially leading to deallocation of memory.
             ~delay_deallocation() noexcept
             {
-                auto lock = _use_count->get_lock_guard();
-                bool done;
-                do
+                try
                 {
-                    done = false;
-                    _use_count->foreach ([this, &done](auto it)
-                                         {
-                        if (_old_entries.count(it.first) == 0)
-                        {
-                            if (--it.second == 0)
-                            {
-                                CBEAM_LOG_DEBUG("cbeam::container::container::stable_reference_buffer: Deallocating " + convert::to_string((void*)it.first) + " in context of destruction of class delay_deallocation");
-                                free(it.first);
-                                _use_count->erase(it.first);
-                                done = true;
-                                return false;
-                            }
-                            else
-                            {
-                                _old_entries.insert(it.first); // protect this entry in case done is set to true and we perform a second scan
-                                CBEAM_LOG_DEBUG("cbeam::container::container::stable_reference_buffer: Removed reference to " + convert::to_string((void*)it.first) + " (" + std::to_string(it.second) + " left) in context of destruction of class delay_deallocation");
-                            }
+                    auto lock = _use_count->get_lock_guard();
 
-                            return true;
+                    // Collect new entries under lock
+                    std::vector<uint8_t*> new_entries;
+                    _use_count->foreach ([&](auto kv)
+                                         {
+                auto ptr = kv.first;
+                if (ptr != nullptr && _old_entries.count(ptr) == 0) {
+                    new_entries.push_back(ptr);
+                }
+                return true; });
+
+                    // Now decrement those new entries.
+                    for (auto* ptr : new_entries)
+                    {
+                        int updated = 0;
+                        try
+                        {
+                            updated = _use_count->update(ptr, [](int& c)
+                                                         { --c; });
+                        }
+                        catch (...)
+                        {
+                            // If the key vanished meanwhile, just continue; this scope no longer owns it.
+                            continue;
                         }
 
-                        return true; });
-                } while (done);
-                _use_count->insert(nullptr, get_initial_use_count() - 1);
-                // CBEAM_LOG_DEBUG("Resetting initial useCount to " + std::to_string(get_initial_use_count()) + " to leave scope of delayed deallocation");
+                        if (updated == 0)
+                        {
+                            CBEAM_LOG_DEBUG("... deallocating " + convert::to_string((void*)ptr)
+                                            + " when leaving delay_deallocation scope");
+                            free(ptr);
+                            _use_count->erase(ptr);
+                        }
+                        else if (updated < 0)
+                        {
+                            CBEAM_LOG("stable_reference_buffer::delay_deallocation: negative refcount detected");
+                            assert(false);
+                        }
+                    }
+
+                    // Restore initial use count to its previous value.
+                    _use_count->insert(nullptr, _initial_on_entry);
+                }
+                catch (...)
+                {
+                    // never throw from noexcept dtor
+                    CBEAM_LOG("stable_reference_buffer::delay_deallocation: unexpected exception in destructor");
+                    assert(false);
+                }
             }
 
         private:
             std::set<uint8_t*>                                      _old_entries;
-            std::shared_ptr<stable_interprocess_map<uint8_t*, int>> _use_count{get_use_count()};
+            std::shared_ptr<stable_interprocess_map<uint8_t*, int>> _use_count;
+            int                                                     _initial_on_entry{1}; // FIX: remember starting value
         };
 
         stable_reference_buffer() ///< Will not create any memory block. Use `append` to create one or append bytes to an existing one.
@@ -191,7 +217,7 @@ namespace cbeam::container
             }
 
             _buffer = other._buffer;
-
+            _size   = other._size;
             _use_count->update(_buffer, [this, &other](int& count)
                                { ++count; });
 
@@ -199,25 +225,73 @@ namespace cbeam::container
         }
 
         /// \brief append the given buffer to the end of the current buffer. If there is no current buffer yet, it will be allocated. Memory will be copied if required, otherwise expanded.
-        void append(const void* bufferToAppend, const size_t lengthOfBuffer) override
+        void append(const void* data, const size_t len) override
         {
             auto lock = _use_count->get_lock_guard();
 
             if (_size == 0 && _buffer != nullptr)
             {
-                throw cbeam::error::logic_error("cbeam::container::container::stable_reference_buffer::append: This instance was created from a raw pointer without knowledge of its buffer length, so appending is not possible.");
+                throw cbeam::error::logic_error(
+                    "stable_reference_buffer::append: instance was created from a raw pointer without a known size");
             }
 
-            uint8_t* old_buffer = _buffer;
-
-            buffer::append(bufferToAppend, lengthOfBuffer);
-
-            if (_buffer != old_buffer)
+            if (_buffer && _use_count->at_or_default(_buffer, 0) > 1)
             {
-                if (old_buffer)
+                // ---- Copy-on-Write path: other instances still reference the old block ----
+                const size_t new_size = _size + len;
+                uint8_t*     new_buf  = static_cast<uint8_t*>(std::malloc(new_size));
+                if (!new_buf)
                 {
-                    _use_count->insert(_buffer, _use_count->at(old_buffer));
-                    _use_count->erase(old_buffer);
+                    CBEAM_LOG("stable_reference_buffer::append (COW): Out of RAM (" + std::to_string(new_size) + ")");
+                    throw cbeam::error::bad_alloc();
+                }
+                // copy old data + append new bytes
+                std::memcpy(new_buf, _buffer, _size);
+                std::memcpy(new_buf + _size, data, len);
+
+                // drop our reference to the old block
+                int remaining = 0;
+                try
+                {
+                    remaining = _use_count->update(_buffer, [](int& c)
+                                                   { --c; });
+                }
+                catch (...)
+                {
+                    remaining = 0; // if the key vanished, treat as zero
+                }
+                if (remaining == 0)
+                {
+                    std::free(_buffer);
+                    _use_count->erase(_buffer);
+                }
+                else if (remaining < 0)
+                {
+                    CBEAM_LOG("stable_reference_buffer::append: negative refcount after decrement");
+                    assert(false);
+                }
+
+                _buffer = new_buf;
+                _size   = new_size;
+
+                // newly created block: start with current initial count (respects delay_deallocation scopes)
+                _use_count->insert(_buffer, get_initial_use_count());
+                return;
+            }
+
+            // ---- Exclusive owner (or no buffer yet): realloc is safe ----
+            uint8_t* old       = _buffer;
+            int      old_count = (old ? _use_count->at_or_default(old, get_initial_use_count()) : 0);
+
+            buffer::append(data, len); // may move and free 'old'
+
+            if (_buffer != old)
+            {
+                if (old)
+                {
+                    // preserve the previous refcount when moving the address
+                    _use_count->insert(_buffer, old_count);
+                    _use_count->erase(old);
                 }
                 else
                 {
@@ -271,6 +345,7 @@ namespace cbeam::container
 
                 assert(is_known(other._buffer));
                 _buffer = other._buffer;
+                _size   = other._size;
                 _use_count->update(_buffer, [this, &other](auto& count)
                                    { ++count; });
                 CBEAM_LOG_DEBUG("cbeam::container::container::stable_reference_buffer: " + std::to_string(_use_count->at(_buffer)) + ". reference to " + convert::to_string((void*)_buffer) + " (added from copy assignment operator)");
@@ -387,10 +462,24 @@ namespace cbeam::container
          */
         static std::shared_ptr<stable_interprocess_map<uint8_t*, int>> get_use_count()
         {
-            return lifecycle::singleton<stable_interprocess_map<uint8_t*, int>, std::string, size_t>::get(
-                "cbeam::memory::stable_reference_buffer::_use_count",
-                std::to_string(concurrency::get_current_process_id()) + ".srb.cbeam",
-                1024);
+            std::size_t bytes = 1ull << 16; // 64 KiB default (maximum during heavy loads in acrionphoto: 2 KiB)
+
+            if (const char* env = std::getenv("CBEAM_SRB_MAP_BYTES"))
+            {
+                char*              end = nullptr;
+                unsigned long long v   = std::strtoull(env, &end, 10);
+                if (end && *end == '\0' && v >= 1024)
+                {
+                    bytes = static_cast<std::size_t>(v);
+                }
+            }
+
+            return lifecycle::singleton<
+                stable_interprocess_map<uint8_t*, int>,
+                std::string,
+                std::size_t>::get("cbeam::memory::stable_reference_buffer::_use_count",
+                                  std::to_string(concurrency::get_current_process_id()) + ".srb.cbeam",
+                                  bytes);
         }
 
         /// \brief get the initial value of the reference counter for a newly created buffer
