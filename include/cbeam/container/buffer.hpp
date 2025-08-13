@@ -77,13 +77,13 @@ namespace cbeam::container
             uint8_t* new_buffer = (uint8_t*)realloc(_buffer, length_of_buffer);
             if (!new_buffer)
             {
-                CBEAM_LOG("cbeam::container::buffer::append: Out of RAM (" + std::to_string(_size) + "+" + std::to_string(length_of_buffer) + ")");
+                CBEAM_LOG("cbeam::container::buffer::buffer: Out of RAM (" + std::to_string(_size) + "+" + std::to_string(length_of_buffer) + ")");
                 throw std::bad_alloc();
             }
 
             _buffer = new_buffer;
             _size   = length_of_buffer;
-            std::memcpy(_buffer + _size, address, length_of_buffer);
+            std::memcpy(_buffer, address, length_of_buffer);
         }
 
         /// \brief Copy construction means that the other buffer is deep copied to construct this instance.

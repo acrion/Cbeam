@@ -169,7 +169,6 @@ namespace cbeam::lifecycle
 
         ~singleton() noexcept override
         {
-            CBEAM_LOG_DEBUG("cbeam::lifecycle::singleton destruction: " + _name);
         }
 
         /**
