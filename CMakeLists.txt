@@ -87,6 +87,7 @@ SET(SRCS
     include/cbeam/convert/nested_map.hpp
     include/cbeam/convert/string.hpp
     include/cbeam/convert/xpod.hpp
+    include/cbeam/error/bad_alloc.hpp
     include/cbeam/error/base_error.hpp
     include/cbeam/error/logic_error.hpp
     include/cbeam/error/out_of_range.hpp
