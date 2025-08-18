@@ -27,10 +27,14 @@ cmake_policy(VERSION 3.25.2)
 include(FetchContent)
 FetchContent_Declare(
     acrion_cmake
-    GIT_REPOSITORY git@github.com:acrion/cmake.git
+    GIT_REPOSITORY https://github.com/acrion/cmake.git
     GIT_TAG main
+    GIT_SHALLOW TRUE
 )
-FetchContent_MakeAvailable(acrion_cmake)
+FetchContent_GetProperties(acrion_cmake)
+if(NOT acrion_cmake_POPULATED)
+    FetchContent_MakeAvailable(acrion_cmake)
+endif()
 
 include(${acrion_cmake_SOURCE_DIR}/set-cpp-version.cmake)
 
@@ -153,7 +157,8 @@ include(FetchContent)
 FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG 58d77fa8070e8cec2dc1ed015d66b454c8d78850 # release-1.12.1
+    GIT_TAG v1.17.0
+    GIT_SHALLOW TRUE
 )
 
 if (WIN32)
